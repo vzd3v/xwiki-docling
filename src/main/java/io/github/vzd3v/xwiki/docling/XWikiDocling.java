@@ -133,6 +133,12 @@ public final class XWikiDocling implements Initializable, Disposable {
     return service.forgetFailed();
   }
 
+  public int forgetUnused(List<String> keys) throws Exception {
+    requireAdmin();
+    requireEnabled();
+    return service.forgetUnused(keys);
+  }
+
   private void requireAdmin() throws Exception {
     XWikiContext c = contextProvider.get();
     authorizationManager.checkAccess(

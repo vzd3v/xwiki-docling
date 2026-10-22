@@ -43,7 +43,8 @@ class ParserContractTest {
         1000000,
         100000,
         32,
-        1000000);
+        1000000,
+        null);
   }
 
   private static byte[] pdf() throws Exception {

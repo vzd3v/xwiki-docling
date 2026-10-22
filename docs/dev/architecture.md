@@ -1,6 +1,6 @@
 # Implementation
 
-The package registers `DoclingParser` through Tika's parser SPI. Both native XWiki extraction paths select it for supported MIME types. It reads cached plain text; misses enqueue conversion and return native extraction. Handler exceptions propagate normally. A replayable Tika spool preserves native parsing if cache/storage fails.
+The package registers `DoclingParser` through Tika's parser SPI. Both native XWiki extraction paths select it for supported MIME types. It reads cached plain text; misses enqueue conversion and return native extraction. Handler exceptions propagate normally. A replayable Tika spool preserves native parsing if cache/storage fails. The adapter borrows that file for hashing; a cache hit creates no second attachment copy. A miss copies only an admitted input into the persistent conversion spool.
 
 `XWikiDocling` owns the lifecycle and administrator boundary. The separate `XWikiDoclingEvents` listener injects that singleton. Document events enqueue the current canonical page reference, including locale. A background job establishes a fresh XWiki execution context, loads current attachment metadata, updates ownership atomically, and invokes native indexers. It never reuses a request's XWiki context across threads.
 

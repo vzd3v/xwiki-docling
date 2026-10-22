@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS owners(
  cache_key TEXT NOT NULL REFERENCES cache(cache_key), updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS owners_cache ON owners(cache_key);
+CREATE INDEX IF NOT EXISTS owners_page ON owners(page_ref,attachment_ref);
 CREATE TABLE IF NOT EXISTS reindex(
  page_ref TEXT PRIMARY KEY, generation INTEGER NOT NULL DEFAULT 1,
  attempts INTEGER NOT NULL DEFAULT 0, available_at INTEGER NOT NULL DEFAULT 0,

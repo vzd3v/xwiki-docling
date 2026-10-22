@@ -26,9 +26,13 @@ public record Config(
     long maxInputBytes,
     long maxOutputChars,
     int maxPendingJobs,
-    long maxSpoolBytes) {
+    long maxSpoolBytes,
+    String pdfBackend) {
   public Config {
     languages = List.copyOf(languages);
+    if (pdfBackend != null
+        && !List.of("dlparse_v1", "dlparse_v2", "dlparse_v4", "pypdfium2").contains(pdfBackend))
+      throw new IllegalArgumentException("Unsupported pdfBackend");
     if (maxSpoolBytes < maxInputBytes)
       throw new IllegalArgumentException("maxSpoolBytes must be at least maxInputBytes");
   }
@@ -55,12 +59,16 @@ public record Config(
             "maxInputBytes",
             "maxOutputChars",
             "maxPendingJobs",
-            "maxSpoolBytes");
+            "maxSpoolBytes",
+            "pdfBackend");
     for (String key : p.stringPropertyNames()) {
       if (!allowed.contains(key))
         throw new IllegalArgumentException("Unknown configuration property: " + key);
     }
-    if (!Boolean.parseBoolean(p.getProperty("enabled", "false"))) return null;
+    String enabled = p.getProperty("enabled", "false").strip();
+    if (!List.of("true", "false").contains(enabled))
+      throw new IllegalArgumentException("enabled must be true or false");
+    if (!Boolean.parseBoolean(enabled)) return null;
     URI endpoint = URI.create(required(p, "endpoint"));
     if (!List.of("http", "https").contains(endpoint.getScheme())
         || endpoint.getHost() == null
@@ -81,17 +89,20 @@ public record Config(
     String engine = p.getProperty("ocrEngine", "easyocr");
     if (!List.of("auto", "easyocr", "ocrmac", "rapidocr", "tesserocr", "tesseract")
         .contains(engine)) throw new IllegalArgumentException("Unsupported ocrEngine");
-    return new Config(
-        data,
-        endpoint,
-        key,
-        required(p, "converterRevision"),
+    List<String> languages =
         Arrays.stream(p.getProperty("languages", "en").split(","))
             .map(String::strip)
             .filter(s -> !s.isEmpty())
             .sorted()
             .distinct()
-            .toList(),
+            .toList();
+    if (languages.isEmpty()) throw new IllegalArgumentException("languages must not be empty");
+    return new Config(
+        data,
+        endpoint,
+        key,
+        required(p, "converterRevision"),
+        languages,
         engine,
         Duration.ofSeconds(number(p, "timeoutSeconds", 600, 1, 3600)),
         (int) number(p, "workers", 1, 1, 4),
@@ -101,7 +112,8 @@ public record Config(
         number(p, "maxInputBytes", 52428800, 1, 1073741824),
         number(p, "maxOutputChars", 2000000, 1, 20000000),
         (int) number(p, "maxPendingJobs", 32, 1, 10000),
-        number(p, "maxSpoolBytes", 536870912, 1, 107374182400L));
+        number(p, "maxSpoolBytes", 536870912, 1, 107374182400L),
+        p.containsKey("pdfBackend") ? p.getProperty("pdfBackend").strip() : null);
   }
 
   private static String required(Properties p, String key) {
@@ -125,7 +137,8 @@ public record Config(
         + String.join(",", languages)
         + "\nengine="
         + ocrEngine
-        + "\nocr=true\nforce=false\noutput=text\nimages=false";
+        + "\nocr=true\nforce=false\noutput=text\nimages=false"
+        + (pdfBackend == null ? "" : "\npdfBackend=" + pdfBackend);
   }
 
   @Override

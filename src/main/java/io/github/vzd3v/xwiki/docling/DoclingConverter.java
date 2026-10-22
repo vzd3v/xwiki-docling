@@ -5,6 +5,7 @@ import ai.docling.serve.api.convert.request.ConvertDocumentRequest;
 import ai.docling.serve.api.convert.request.options.ConvertDocumentOptions;
 import ai.docling.serve.api.convert.request.options.OcrEngine;
 import ai.docling.serve.api.convert.request.options.OutputFormat;
+import ai.docling.serve.api.convert.request.options.PdfBackend;
 import ai.docling.serve.api.convert.request.source.FileSource;
 import ai.docling.serve.api.convert.response.InBodyConvertDocumentResponse;
 import ai.docling.serve.client.DoclingServeClientException;
@@ -31,15 +32,17 @@ final class DoclingConverter implements Converter {
             .logResponses(false);
     if (config.apiKey() != null) builder.apiKey(config.apiKey());
     api = builder.build();
-    options =
+    var optionBuilder =
         ConvertDocumentOptions.builder()
             .toFormats(List.of(OutputFormat.TEXT))
             .doOcr(true)
             .forceOcr(false)
             .ocrEngine(OcrEngine.valueOf(config.ocrEngine().toUpperCase(Locale.ROOT)))
             .ocrLang(config.languages())
-            .includeImages(false)
-            .build();
+            .includeImages(false);
+    if (config.pdfBackend() != null)
+      optionBuilder.pdfBackend(PdfBackend.valueOf(config.pdfBackend().toUpperCase(Locale.ROOT)));
+    options = optionBuilder.build();
     maxOutput = config.maxOutputChars();
   }
 

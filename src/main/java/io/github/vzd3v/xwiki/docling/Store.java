@@ -376,6 +376,40 @@ final class Store implements AutoCloseable {
     }
   }
 
+  synchronized int forgetUnused(List<String> keys) throws SQLException {
+    try (Connection c = connection()) {
+      c.setAutoCommit(false);
+      try {
+        try (var p =
+            c.prepareStatement(
+                "SELECT state,EXISTS(SELECT 1 FROM owners WHERE cache_key=?) FROM cache WHERE cache_key=?")) {
+          for (String key : keys) {
+            p.setString(1, key);
+            p.setString(2, key);
+            try (ResultSet r = p.executeQuery()) {
+              if (r.next()
+                  && (r.getInt(2) != 0 || List.of("pending", "running").contains(r.getString(1))))
+                throw new IllegalStateException(
+                    "Cannot forget cache entries that are owned or unfinished");
+            }
+          }
+        }
+        int removed = 0;
+        try (var p = c.prepareStatement("DELETE FROM cache WHERE cache_key=?")) {
+          for (String key : keys) {
+            p.setString(1, key);
+            removed += p.executeUpdate();
+          }
+        }
+        c.commit();
+        return removed;
+      } catch (SQLException | RuntimeException e) {
+        c.rollback();
+        throw e;
+      }
+    }
+  }
+
   @Override
   public void close() throws IOException {
     try {
