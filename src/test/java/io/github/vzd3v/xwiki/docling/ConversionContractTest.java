@@ -5,9 +5,16 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.io.ByteArrayInputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardWatchEventKinds;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -31,7 +38,8 @@ class ConversionContractTest {
         max,
         1000,
         32,
-        1000000);
+        1000000,
+        null);
   }
 
   @Test
@@ -152,7 +160,8 @@ class ConversionContractTest {
             8,
             1000,
             1,
-            8);
+            8,
+            null);
     try (ConversionService service =
         new ConversionService(
             bounded,
@@ -193,6 +202,183 @@ class ConversionContractTest {
     while (!condition.get()) {
       if (System.nanoTime() > end) fail("Background work did not complete");
       Thread.sleep(10);
+    }
+  }
+
+  @Test
+  void borrowedFileCacheHitsAvoidTemporaryCopiesAndPreserveLimitAndCapacityFallback()
+      throws Exception {
+    Path borrowed = directory.resolve("borrowed.pdf");
+    byte[] original = new byte[] {1, 2, 3};
+    Files.write(borrowed, original);
+    AtomicInteger calls = new AtomicInteger();
+    Config c = config(8);
+    try (ConversionService service =
+        new ConversionService(
+            c,
+            (file, mime) -> {
+              calls.incrementAndGet();
+              return "recognized";
+            },
+            (page, force) -> {})) {
+      assertNull(service.cachedOrEnqueue(borrowed, "application/pdf"));
+      service.start();
+      await(() -> service.status().getOrDefault("ready", 0L) == 1);
+      try (var watcher = directory.getFileSystem().newWatchService()) {
+        directory.register(watcher, StandardWatchEventKinds.ENTRY_CREATE);
+        assertEquals("recognized", service.cachedOrEnqueue(borrowed, "application/pdf"));
+        var events = watcher.poll();
+        if (events != null)
+          assertTrue(
+              events.pollEvents().stream()
+                  .noneMatch(event -> event.context().toString().startsWith("incoming-")));
+      }
+      assertArrayEquals(original, Files.readAllBytes(borrowed));
+      Files.write(borrowed, new byte[9]);
+      assertNull(service.cachedOrEnqueue(borrowed, "application/pdf"));
+      assertEquals(9, Files.size(borrowed));
+      assertEquals(1, calls.get());
+    }
+    Config bounded =
+        new Config(
+            directory.resolve("bounded"),
+            c.endpoint(),
+            null,
+            "test",
+            c.languages(),
+            c.ocrEngine(),
+            c.timeout(),
+            1,
+            1,
+            20,
+            10,
+            8,
+            1000,
+            1,
+            8,
+            null);
+    Files.write(borrowed, original);
+    try (ConversionService service =
+        new ConversionService(bounded, (file, mime) -> "unused", (page, force) -> {})) {
+      assertNull(service.cachedOrEnqueue(borrowed, "application/pdf"));
+      Files.write(borrowed, new byte[] {4, 5});
+      assertNull(service.cachedOrEnqueue(borrowed, "application/pdf"));
+      assertEquals(1L, service.status().get("pending"));
+      assertArrayEquals(new byte[] {4, 5}, Files.readAllBytes(borrowed));
+    }
+  }
+
+  @Test
+  void exactCleanupRejectsUnfinishedJobsAndRemovesOnlyRequestedUnusedData() throws Exception {
+    CountDownLatch started = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    try (ConversionService service =
+        new ConversionService(
+            config(1000),
+            (file, mime) -> {
+              byte value = Files.readAllBytes(file)[0];
+              if (value == 2) {
+                started.countDown();
+                if (!release.await(5, TimeUnit.SECONDS)) throw new java.io.IOException("timeout");
+              }
+              if (value == 3) throw new ConversionFailure("invalid_document", false);
+              return "recognized";
+            },
+            (page, force) -> {})) {
+      String ready;
+      try (var p = service.prepare(new ByteArrayInputStream(new byte[] {1}), "application/pdf")) {
+        ready = p.key();
+      }
+      service.start();
+      await(() -> service.status().getOrDefault("ready", 0L) == 1);
+      String running;
+      try (var p = service.prepare(new ByteArrayInputStream(new byte[] {2}), "application/pdf")) {
+        running = p.key();
+      }
+      assertTrue(started.await(5, TimeUnit.SECONDS));
+      String pending;
+      try (var p = service.prepare(new ByteArrayInputStream(new byte[] {3}), "application/pdf")) {
+        pending = p.key();
+      }
+      try {
+        assertThrows(
+            IllegalStateException.class, () -> service.forgetUnused(List.of(ready, running)));
+        assertThrows(IllegalStateException.class, () -> service.forgetUnused(List.of(pending)));
+        assertEquals(1L, service.status().get("ready"));
+        assertThrows(
+            IllegalArgumentException.class, () -> service.forgetUnused(List.of("../outside")));
+        assertThrows(IllegalArgumentException.class, () -> service.forgetUnused(List.of()));
+        assertEquals(1, service.forgetUnused(List.of(ready, ready)));
+        assertEquals(0, service.forgetUnused(List.of(ready)));
+      } finally {
+        release.countDown();
+      }
+      await(() -> service.status().getOrDefault("failed", 0L) == 1);
+      assertTrue(Files.exists(directory.resolve("inputs").resolve(pending)));
+      assertEquals(1, service.forgetUnused(List.of(pending)));
+      assertFalse(Files.exists(directory.resolve("inputs").resolve(pending)));
+      assertEquals(1L, service.status().get("ready"));
+    }
+  }
+
+  @Test
+  void oldCompletionCannotDeleteAnInputReadmittedAfterTargetedCleanup() throws Exception {
+    CountDownLatch deleting = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    AtomicBoolean pauseOnce = new AtomicBoolean();
+    AtomicInteger conversions = new AtomicInteger();
+    var executor = Executors.newSingleThreadExecutor();
+    byte[] original = new byte[] {7, 8, 9};
+    try (ConversionService service =
+        new ConversionService(
+            config(1000),
+            (file, mime) -> {
+              assertArrayEquals(original, Files.readAllBytes(file));
+              conversions.incrementAndGet();
+              return "recognized";
+            },
+            (page, force) -> {},
+            file -> {
+              if (pauseOnce.compareAndSet(false, true)) {
+                deleting.countDown();
+                try {
+                  if (!release.await(5, TimeUnit.SECONDS)) throw new java.io.IOException("timeout");
+                } catch (InterruptedException e) {
+                  Thread.currentThread().interrupt();
+                  throw new java.io.IOException(e);
+                }
+              }
+              Files.deleteIfExists(file);
+            })) {
+      String key;
+      try (var p = service.prepare(new ByteArrayInputStream(original), "application/pdf")) {
+        key = p.key();
+      }
+      service.start();
+      assertTrue(deleting.await(5, TimeUnit.SECONDS));
+      var replacement =
+          executor.submit(
+              () -> {
+                assertEquals(1, service.forgetUnused(List.of(key)));
+                try (var p =
+                    service.prepare(new ByteArrayInputStream(original), "application/pdf")) {
+                  return p.key();
+                }
+              });
+      try {
+        assertThrows(
+            TimeoutException.class,
+            () -> replacement.get(100, TimeUnit.MILLISECONDS),
+            "forget/re-admission must wait until old input cleanup completes");
+      } finally {
+        release.countDown();
+      }
+      assertEquals(key, replacement.get(5, TimeUnit.SECONDS));
+      await(() -> conversions.get() == 2 && service.status().getOrDefault("ready", 0L) == 1);
+      assertEquals(0L, service.status().getOrDefault("failed", 0L));
+    } finally {
+      release.countDown();
+      executor.shutdownNow();
     }
   }
 }

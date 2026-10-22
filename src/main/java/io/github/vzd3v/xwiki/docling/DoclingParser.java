@@ -68,9 +68,8 @@ public final class DoclingParser implements Parser {
       ConversionService service = DoclingRuntime.get();
       String cached = null;
       if (service != null) {
-        try (InputStream bytes = Files.newInputStream(file);
-            ConversionService.Prepared prepared = service.prepare(bytes, mime)) {
-          cached = prepared.cached();
+        try {
+          cached = service.cachedOrEnqueue(file, mime);
         } catch (Exception e) {
           LOG.warn(
               "component=xwiki-docling event=cache_unavailable errorType={}",

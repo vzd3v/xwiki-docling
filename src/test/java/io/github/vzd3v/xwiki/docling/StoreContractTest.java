@@ -107,4 +107,29 @@ class StoreContractTest {
       assertNull(store.claim(100, 1, "profile"));
     }
   }
+
+  @Test
+  void targetedCleanupGuardsAllKeysAndPreservesOtherPageOwnership() throws Exception {
+    try (Store store = new Store(directory)) {
+      store.enqueue("shared", "bytes", "profile", "application/pdf", "input");
+      store.completed(store.claim(0, 1, "profile"), "recognized");
+      store.enqueue("unused", "other", "profile", "application/pdf", "input2");
+      store.completed(store.claim(0, 1, "profile"), "other text");
+      var first = new Store.Owner("wiki:First@file", "wiki:First", "1.1", "shared");
+      var second = new Store.Owner("wiki:Second@file", "wiki:Second", "1.1", "shared");
+      store.replaceOwners("wiki:First", List.of(first));
+      store.replaceOwners("wiki:Second", List.of(second));
+      store.replaceOwners("wiki:First", List.of());
+      assertEquals(List.of(second), store.owners("wiki:Second"));
+      assertThrows(
+          IllegalStateException.class, () -> store.forgetUnused(List.of("unused", "shared")));
+      assertEquals(
+          "other text", store.ready("unused"), "rejection must roll back the whole request");
+      store.replaceOwners("wiki:Second", List.of());
+      assertEquals(1, store.forgetUnused(List.of("shared")));
+      assertNull(store.ready("shared"));
+      assertEquals("other text", store.ready("unused"));
+      assertEquals(0, store.forgetUnused(List.of("shared")));
+    }
+  }
 }

@@ -19,6 +19,8 @@ For attachments that already exist when installing, run the bounded [initial rec
 
 Supported OCR routing: PDF, PNG, JPEG, TIFF, BMP, GIF and WebP. Office and text formats keep their native parsers. The native MCP image-reading tool returns an image; this extension does not change that tool into an OCR-text endpoint.
 
+Routing does not guarantee OCR success or accuracy. With the tested Docling Serve 1.37.0/EasyOCR pipeline, a BMP sample failed direct conversion; some physically rotated scans produced empty or incomplete text, and recognition of sparse form labels was limited. Direct Docling requests reproduced these backend results. Native fallback preserves existing extractable text but cannot supply missing OCR for scan-only content. Validate representative documents before relying on search recall.
+
 ## Get started
 
 - [Install and remove](docs/ops/install.md)
@@ -32,7 +34,7 @@ Supported OCR routing: PDF, PNG, JPEG, TIFF, BMP, GIF and WebP. Office and text 
 mvn -B -ntp spotless:check verify
 ```
 
-The artifact is `target/xwiki-docling-0.1.0.jar`. Java 21+ and Maven 3.9+ are required to build. XWiki 18.8 API classes require Java 21. XWiki and Tika are provided by the host application; Docling SDK/Jackson are isolated inside the artifact. SQLite JDBC retains its native package for JNI compatibility.
+The artifact is `target/xwiki-docling-0.1.1.jar`. Java 21+ and Maven 3.9+ are required to build. XWiki 18.8 API classes require Java 21. XWiki and Tika are provided by the host application; Docling SDK/Jackson are isolated inside the artifact. SQLite JDBC retains its native package for JNI compatibility.
 
 ## Compatibility
 
