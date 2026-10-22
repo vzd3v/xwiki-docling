@@ -36,6 +36,10 @@ The artifact is `target/xwiki-docling-0.1.0.jar`. Java 21+ and Maven 3.9+ are re
 
 ## Compatibility
 
-The initial target is XWiki 18.8.0, Java 21, Tika 3.3.2, LLM Index/MCP 0.11 and Docling Serve 1.37.0. Live acceptance status is recorded before a release is published. Other combinations require validation; Java compilation compatibility alone does not prove XWiki runtime compatibility.
+Verified on a test wiki with XWiki 18.8.0, Java 21, Tika 3.3.2, LLM Index/MCP 0.11 and Docling Serve 1.37.0, using Russian/English EasyOCR and one conversion worker.
+
+Synthetic live checks covered scanned PDFs, mixed text/scanned PDFs and PNG OCR through ordinary search, semantic search and native MCP PDF extraction; native PDF/Office controls; unchanged original file hashes; cache reuse and web restart persistence; attachment replacement, deletion and rapid deletion/recreation with a reset revision number; and reader access grants/revocations. A deliberately corrupt PDF failed conversion safely. The native MCP image branch continues to return the image itself.
+
+These checks validate this version combination on a test wiki, not production capacity or every document format. Other combinations require validation; Java compilation compatibility alone does not prove XWiki runtime compatibility.
 
 This project is independently maintained and is not an official XWiki or Docling product. [MIT license](LICENSE); bundled dependencies retain their own licenses.
