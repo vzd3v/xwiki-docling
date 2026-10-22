@@ -1,0 +1,30 @@
+[
+  {
+    "artifact": "ai/docling/docling-serve-client/0.7.0/docling-serve-client-0.7.0.jar",
+    "sha256": "f80ae5d8c91214b2a99578dd059093be3c8564af86efdd0c93fec537c720c7bd"
+  },
+  {
+    "artifact": "ai/docling/docling-serve-api/0.7.0/docling-serve-api-0.7.0.jar",
+    "sha256": "54f5e9cd79e4f294a53cfbdaa90ac61220d576820d225f46fe4f616cefacfef5"
+  },
+  {
+    "artifact": "ai/docling/docling-core/0.7.0/docling-core-0.7.0.jar",
+    "sha256": "eaf33a44f09fde60768607d901600673b54aff9c36198af6a21fd1990d363c68"
+  },
+  {
+    "artifact": "com/fasterxml/jackson/core/jackson-databind/2.22.4/jackson-databind-2.22.4.jar",
+    "sha256": "d4cbf8947087f305869826801913abdc50735a1fab2074a1993e7bc67ca974a3"
+  },
+  {
+    "artifact": "com/fasterxml/jackson/core/jackson-core/2.22.4/jackson-core-2.22.4.jar",
+    "sha256": "2d30c375cddea9657a1e1ef97547a2694b663b355facb4de53a097782b312d1a"
+  },
+  {
+    "artifact": "com/fasterxml/jackson/core/jackson-annotations/2.22/jackson-annotations-2.22.jar",
+    "sha256": "21ddb598807d3a51a876704eb979d9296e1c6a6f47ab1826ff88c6d6a127a2d0"
+  },
+  {
+    "artifact": "org/xerial/sqlite-jdbc/3.53.4.0/sqlite-jdbc-3.53.4.0.jar",
+    "sha256": "bcb1f51e36f940867e83342f9efbf5968ac44a6bef4d397bb4af7b17b45cd2fb"
+  }
+]

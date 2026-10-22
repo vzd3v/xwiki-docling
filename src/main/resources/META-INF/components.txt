@@ -1,0 +1,2 @@
+io.github.vzd3v.xwiki.docling.XWikiDocling
+io.github.vzd3v.xwiki.docling.XWikiDoclingEvents

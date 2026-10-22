@@ -1,0 +1,11 @@
+/target/
+*.log
+.idea/
+.classpath
+.project
+.settings/
+AGENTS.local.md
+local_deploy.md
+*.sqlite*
+*.db
+*.env
