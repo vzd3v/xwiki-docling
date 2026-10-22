@@ -1,0 +1,2 @@
+# Preserve upstream license/notice bytes, including their original line endings.
+src/main/resources/META-INF/licenses/** -text -whitespace
