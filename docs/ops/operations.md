@@ -16,7 +16,27 @@ admin.reconcile('xwiki:Example.Page')
 
 `reconcile` records a durable per-page job and returns immediately. It hashes supported attachments on that page, reuses conversions for identical bytes and settings, and requests native ordinary/semantic indexing. It does not recreate a collection or trust attachment revision strings as content hashes. Repeat calls are safe. Native semantic indexing is optional; when present its own task consumer determines matching collections and hidden-page behavior.
 
-For existing articles, feed a bounded list of canonical page references to `reconcile`, preserving a checkpoint outside the repository. Reconcile only the spaces or pages whose attachments should be OCR searchable. The worker limits remote conversion concurrency; watch pending/failed counts and the shared service's latency before feeding a large batch. Do not clean or rebuild an entire index.
+For existing articles, use an explicit list of canonical page references. This administrator-owned Groovy example admits at most ten page intents per run and stops feeding when twenty page intents are already pending. Edit the list and retain the printed `nextOffset` in your private operational notes; restart at that offset. Repeating a batch is safe because intents and conversions are deduplicated.
+
+```groovy
+def admin = com.xpn.xwiki.web.Utils.getComponent(
+    Class.forName('io.github.vzd3v.xwiki.docling.XWikiDocling'), 'xwiki-docling')
+def pages = ['xwiki:Manual.Installation.WebHome',
+             'xwiki:Manual.Troubleshooting.WebHome']
+int offset = 0 // Set to the previous run's nextOffset.
+int batchSize = 10
+int admitted = 0
+while (offset < pages.size() && admitted < batchSize) {
+    if ((admin.status()['pendingIndex'] ?: 0L) >= 20L) break
+    admin.reconcile(pages[offset])
+    offset++
+    admitted++
+}
+println([admitted: admitted, nextOffset: offset, total: pages.size(),
+         status: admin.status(), failures: admin.failures(10)])
+```
+
+A cursor acknowledges durable page intents, not completed OCR. After all pages are admitted, wait for `pendingIndex` and `pending`/`running` conversion counts to reach zero, inspect `failed` and `failures(20)`, then search a known scan-only phrase through ordinary and semantic search. A nonzero failed count requires repair or explicit disposal as described below. The worker limits remote concurrency and spool capacity; watch the shared converter's latency before feeding more. Reconcile only relevant spaces or pages. Do not clean or rebuild an entire index.
 
 New uploads, replacements and deletions enqueue their owning page automatically. Restart resumes durable pending work without scanning or reindexing all healthy pages. If the extension was disabled during edits, reconcile those changed pages explicitly afterward.
 
